@@ -53,7 +53,7 @@ public class RinexNav {
             yearString = "0" + year;
         else
             yearString = "" + year;
-        String fileName = "TF" + dateString + ver + "." + yearString + type;
+        String fileName = "NA" + dateString + ver + "." + yearString + type;
 
         try {
             File rootFile = new File(context.getFilesDir().getAbsolutePath(), context.getString(R.string.app_name) + "_Rinex");

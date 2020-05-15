@@ -17,6 +17,11 @@
 package com.gnss.gnssdatalogger.Constellations;
 
 
+import com.gnss.gnssdatalogger.GNSSConstants;
+import com.gnss.gnssdatalogger.coord.Coordinates;
+import com.gnss.gnssdatalogger.coord.SatellitePosition;
+import com.gnss.gnssdatalogger.corrections.TopocentricCoordinates;
+
 /**
  * Container class for storing satellite related parameters
  */
@@ -30,6 +35,10 @@ public class SatelliteParameters {
         this.pseudorange = pseudorange;
     }
 
+    /**
+     * sum of all calculated corrections
+     */
+    private double accumulatedCorrection;
 
     /**
      * Pseudorange to the satellite
@@ -39,6 +48,37 @@ public class SatelliteParameters {
     private double carrierFrequency;
 
 
+    /**
+     * Position of the satellite
+     */
+    protected Coordinates coordinates;
+
+    public SatellitePosition getSatellitePosition() {
+        return satellitePosition;
+    }
+
+    public void setSatellitePosition(SatellitePosition satellitePosition) {
+        this.satellitePosition = satellitePosition;
+        this.clockBias = satellitePosition.getSatelliteClockError() * GNSSConstants.SPEED_OF_LIGHT; //todo: add this as a separate correction.
+    }
+
+    /**
+     * Satellite position in the ECEF frame
+     */
+    private SatellitePosition satellitePosition;
+
+    public SatellitePosition getSatelliteVelocity() {
+        return satelliteVelocity;
+    }
+
+    public void setSatelliteVelocity(SatellitePosition satelliteVelocity) {
+        this.satelliteVelocity = satelliteVelocity;
+    }
+
+    /**
+     * Satellite velocity in the ECEF frame
+     */
+    private SatellitePosition satelliteVelocity;
 
     /**
      * Satellite id in the constellation
@@ -56,6 +96,7 @@ public class SatelliteParameters {
      */
     private int constellationType;
 
+
     private GpsTime gpsTime;
 
     public GpsTime getGpsTime() {
@@ -66,19 +107,24 @@ public class SatelliteParameters {
         this.gpsTime = gpsTime;
     }
 
+
     /**
      * @param satelliteId Id of the newly created satellite
      * @param pseudorange pseudorange to this satellite
      */
-    public SatelliteParameters(GpsTime gpsTime,int satelliteId, Pseudorange pseudorange){
+    public SatelliteParameters(GpsTime gpsTime, int satelliteId, Pseudorange pseudorange){
         this.gpsTime=gpsTime;
         this.satId = satelliteId;
         this.pseudorange = pseudorange;
         setSignalStrength(0.0);
     }
 
-
-
+    /**
+     * @param newPose new coordinates of the satellite
+     */
+    protected void setCoordinates(Coordinates newPose){
+        coordinates = newPose;
+    }
 
     public int getSatId() {
         return satId;
@@ -99,6 +145,44 @@ public class SatelliteParameters {
 
     public void setClockBias(double clockBias) {
         this.clockBias = clockBias;
+    }
+
+    /**
+     * asimuth and elevation of the satellite with respect to the user
+     */
+    private TopocentricCoordinates rxTopo;
+
+    /**
+     * @return asimuth and elevation of the satellite with respect to the user
+     */
+    public TopocentricCoordinates getRxTopo() {
+        return rxTopo;
+    }
+
+    /**
+     * sets the asimuth and elevation of the satellite with respect to the user.
+     * This also sets the pseudorange measurement variance
+     * @param rxTopo new coordinates
+     */
+    public void setRxTopo(TopocentricCoordinates rxTopo) { //todo rename to better indicate function
+        this.rxTopo = rxTopo;
+        pseudorange.setMeasurementVariance(
+                1.0 / Math.pow(Math.tan(rxTopo.getElevation()-0.1),2)/100.0);
+    }
+
+    /**
+     * @return correction which is to be applied to the pseudorange
+     */
+    public double getAccumulatedCorrection() {
+        return accumulatedCorrection;
+    }
+
+    /**
+     *
+     * @param accumulatedCorrection correction which is to be applied to the pseudorange
+     */
+    public void setAccumulatedCorrection(double accumulatedCorrection) {
+        this.accumulatedCorrection = accumulatedCorrection;
     }
 
     /**
@@ -205,6 +289,4 @@ public class SatelliteParameters {
     public void setDoppler(double doppler) {
         this.doppler = doppler;
     }
-
-
 }

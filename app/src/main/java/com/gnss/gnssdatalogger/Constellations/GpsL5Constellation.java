@@ -8,6 +8,8 @@ import android.os.Build;
 
 
 import com.gnss.gnssdatalogger.GNSSConstants;
+import com.gnss.gnssdatalogger.Ntrip.GNSSEphemericsNtrip;
+import com.gnss.gnssdatalogger.coord.Coordinates;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -206,6 +208,12 @@ public class GpsL5Constellation extends Constellation {
             }
         }
     }
+
+    @Override
+    public void calculateSatPosition(GNSSEphemericsNtrip gnssEphemerisNtrip, Coordinates position) {
+
+    }
+
     @Override
     public double getSatelliteSignalStrength(int index) {
         synchronized (this) {
@@ -220,6 +228,21 @@ public class GpsL5Constellation extends Constellation {
         }
     }
 
+    @Override
+    public Time getTime() {
+        return null;
+    }
+
+
+    @Override
+    public Coordinates getRxPos() {
+        return null;
+    }
+
+    @Override
+    public void setRxPos(Coordinates rxPos) {
+
+    }
 
     @Override
     public SatelliteParameters getSatellite(int index) {
@@ -233,6 +256,16 @@ public class GpsL5Constellation extends Constellation {
         synchronized (this) {
             return observedSatellites;
         }
+    }
+
+    @Override
+    public List<SatelliteParameters> getUnusedSatellites() {
+        return null;
+    }
+
+    @Override
+    public List<SatelliteParameters> getSPPUsedSatellites() {
+        return null;
     }
 
     public void setObservedSatellites(List<SatelliteParameters> observedSatellites) {

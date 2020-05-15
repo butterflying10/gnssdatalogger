@@ -552,15 +552,16 @@
             android:orientation="vertical"
             android:layout_marginStart="5dp"
             >
+
             <Button
-                android:id="@+id/record_btnUpload"
+                android:id="@+id/record_btnSpp"
                 android:layout_width="90dp"
                 android:layout_height="wrap_content"
                 android:background="@drawable/button_shape"
                 android:fontFamily="@font/thaisansneue_light"
                 android:gravity="center"
                 android:padding="3dp"
-                android:text="@string/uploadposition"
+                android:text="@string/spp"
                 android:textColor="@color/colorDarkGray"
                 android:textSize="16sp" />
 

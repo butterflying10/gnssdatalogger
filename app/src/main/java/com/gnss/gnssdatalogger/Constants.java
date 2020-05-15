@@ -45,5 +45,76 @@ final public class Constants {
     public static final String DEF_ANTENNA_ECCENTRICITY_NORTH = "0.0000";
     public static final String DEF_ANTENNA_HEIGHT = "0.0000";
 
-    public static final String FILE_SETTING = "gnss_record_setting";
+    public static final String RINEX_SETTING = "gnss_record_setting";
+
+
+
+
+
+    /*
+    spp setting
+     */
+    public static final String SPP_SETTING="spp setting";
+
+    public static final String KEY_SPP_FILE="spp file";
+    public static final int SPP_FILE=Constants.SPP_FILE_NO;
+    public static final int SPP_FILE_YES=1;
+    public static final int SPP_FILE_NO=0;
+
+
+    public static final String KEY_SPP_MODEL="spp model";
+    public static final int  DEF_SPP_MODEL=Constants.SPP_MODEL_SINGLE;
+
+    public static final int SPP_MODEL_SINGLE=0;
+    public static final int SPP_MODEL_DIFF=1;
+    public static final int SPP_MODEL_ALL=2;
+
+
+    public static final String KEY_GPS_SYSTEM="gps system";
+    public static final int  DEF_GPS_SYSTEM=Constants.GPS_NO;
+
+    public static final String KEY_GAL_SYSTEM="gal system";
+    public static final int  DEF_GAL_SYSTEM=Constants.GAL_NO;
+
+    public static final String KEY_GLO_SYSTEM="glo system";
+    public static final int  DEF_GLO_SYSTEM=Constants.GLO_NO;
+
+    public static final String KEY_BDS_SYSTEM="bds system";
+    public static final int  DEF_BDS_SYSTEM=Constants.BDS_NO;
+
+    public static final String KEY_QZSS_SYSTEM="qzss system";
+    public static final int  DEF_QZSS_SYSTEM=Constants.QZSS_NO;
+
+    public static final int GPS_YES=1;
+    public static final int GPS_NO=0;
+    public static final int GAL_YES=1;
+    public static final int GAL_NO=0;
+    public static final int GLO_YES=1;
+    public static final int GLO_NO=0;
+    public static final int BDS_YES=1;
+    public static final int BDS_NO=0;
+    public static final int QZSS_YES=1;
+    public static final int QZSS_NO=0;
+
+    public static final String KEY_NTRIP_HOST="ntrip host";
+    public static final String DEF_NTRIP_HOST="ntrip.gnsslab.cn";
+
+    public static final String KEY_NTRIP_PORT="ntrip port";
+    public static final String  DEF_NTRIP_PORT="2101";
+
+    public static final String KEY_NTRIP_USERNAME="ntrip username";
+    public static final String  DEF_NTRIP_USERNAME="tfbai";
+
+    public static final String KEY_NTRIP_PASSWORD="ntrip password";
+    public static final String  DEF_NTRIP_PASSWARD="tfbai@2020";
+
+
+
+
+
+
+
+
+
+
 }

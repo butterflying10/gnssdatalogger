@@ -6,13 +6,21 @@ import android.location.GnssMeasurementsEvent;
 import android.location.GnssStatus;
 import android.os.Build;
 
+import com.gnss.gnssdatalogger.ConstantSystem;
 import com.gnss.gnssdatalogger.GNSSConstants;
+import com.gnss.gnssdatalogger.Ntrip.GNSSEphemericsNtrip;
+import com.gnss.gnssdatalogger.coord.Coordinates;
+import com.gnss.gnssdatalogger.coord.SatellitePosition;
+import com.gnss.gnssdatalogger.corrections.Correction;
+import com.gnss.gnssdatalogger.corrections.ShapiroCorrection;
+import com.gnss.gnssdatalogger.corrections.TopocentricCoordinates;
+import com.gnss.gnssdatalogger.corrections.TropoCorrection;
 
 import java.util.ArrayList;
 import java.util.List;
 
 public class QzssConstellation extends Constellation {
-    private final static char satType = 'J';
+    private final static char satType = ConstantSystem.QZSS_SYSTEM;
     private static final String NAME = "QZSS L1";
     private static final String TAG = "QzssConstellation";
     private static double L1_FREQUENCY = 1.57542e9;
@@ -21,7 +29,18 @@ public class QzssConstellation extends Constellation {
     private boolean fullBiasNanosInitialized = false;
     private long FullBiasNanos;
 
-    //private Coordinates rxPos;
+    private Coordinates rxPos;
+
+    public Coordinates getRxPos() {
+        synchronized (this) {
+            return rxPos;
+        }
+    }
+    public void setRxPos(Coordinates rxPos) {
+        synchronized (this) {
+            this.rxPos = rxPos;
+        }
+    }
     protected double tRxGPS;
     protected double weekNumberNanos;
     private List<SatelliteParameters> unusedSatellites = new ArrayList<>();
@@ -41,7 +60,9 @@ public class QzssConstellation extends Constellation {
     /**
      * Time of the measurement
      */
-    //private Time timeRefMsec;
+    private Time timeRefMsec;
+
+
 
     protected int visibleButNotUsed = 0;
 
@@ -49,6 +70,16 @@ public class QzssConstellation extends Constellation {
     // (as done in gps-measurement-tools MATLAB code)
     private static final int MAXTOWUNCNS = 50;                                     // [nanoseconds]
 
+
+    /**
+     * Corrections which are to be applied to received pseudoranges
+     */
+    private ArrayList<Correction> corrections = new ArrayList<>();
+
+    public QzssConstellation() {
+        corrections.add(new ShapiroCorrection());
+        corrections.add(new TropoCorrection());
+    }
 
 
     /**
@@ -86,7 +117,7 @@ public class QzssConstellation extends Constellation {
 
 
             long TimeNanos = gnssClock.getTimeNanos();
-            //timeRefMsec = new Time(System.currentTimeMillis());
+            timeRefMsec = new Time(System.currentTimeMillis());
             double BiasNanos = gnssClock.getBiasNanos();
             double gpsTime, pseudorange;
 
@@ -233,6 +264,102 @@ public class QzssConstellation extends Constellation {
     }
 
     @Override
+    public void calculateSatPosition(GNSSEphemericsNtrip gpsEphemerisNtrip, Coordinates position) {
+
+        // Make a list to hold the satellites that are to be excluded based on elevation/CN0 masking criteria
+        List<SatelliteParameters> excludedSatellites = new ArrayList<>();
+
+
+
+        synchronized (this) {
+            //System.out.println("calculateSatPosition  此历元卫星数：" + observedSatellites.size());
+
+
+            //接收机的位置，这里用接收机的位置主要是为了计算对流层延迟
+            rxPos = Coordinates.globalXYZInstance(position.getX(), position.getY(), position.getZ());
+
+            System.out.println("calculateSatPosition   接收机近似位置：" + position.getX() + "," + position.getY() + "," + position.getZ());
+
+            for (SatelliteParameters observedSatellite : observedSatellites) {
+                // Computation of the GPS satellite coordinates in ECEF frame
+
+                // Determine the current GPS week number
+                int gpsWeek = (int) (weekNumberNanos / GNSSConstants.NUMBER_NANO_SECONDS_PER_WEEK);
+
+                // Time of signal reception in GPS Seconds of the Week (SoW)
+                double gpsSow = (tRxGPS - weekNumberNanos) * 1e-9;
+                Time tGPS = new Time(gpsWeek, gpsSow);
+
+                //Log.d(TAG,"calculateSatPosition"+tGPS.toString());
+
+                // Convert the time of reception from GPS SoW to UNIX time (milliseconds)
+                long timeRx = tGPS.getMsec();
+
+                SatellitePosition sp = gpsEphemerisNtrip.getSatPositionAndVelocities(
+                        timeRx,
+                        observedSatellite.getPseudorange(),
+                        observedSatellite.getSatId(),
+                        satType,
+                        0.0
+                );
+
+                if (sp == null) {
+                    excludedSatellites.add(observedSatellite);
+                    //GnssCoreService.notifyUser("Failed getting ephemeris data!", Snackbar.LENGTH_SHORT, RNP_NULL_MESSAGE);
+                    //跳出循环
+                    continue;
+                }
+
+
+                observedSatellite.setSatellitePosition(sp);
+
+                observedSatellite.setRxTopo(
+                        new TopocentricCoordinates(
+                                rxPos,
+                                observedSatellite.getSatellitePosition()));
+
+                //Add to the exclusion list the satellites that do not pass the masking criteria
+                if (observedSatellite.getRxTopo().getElevation() < MASK_ELEVATION) {
+                    excludedSatellites.add(observedSatellite);
+                }
+                System.out.println("calculateSatPosition  此卫星高度角"+observedSatellite.getRxTopo().getElevation()+"\\"+observedSatellite.getRxTopo().getAzimuth());
+                double accumulatedCorrection = 0;
+                //计算累计的误差，包括对流层延迟,和相对论效应
+                for (Correction correction : corrections) {
+
+                    correction.calculateCorrection(
+                            new Time(timeRx),
+                            rxPos,
+                            observedSatellite.getSatellitePosition()
+                    );
+                    accumulatedCorrection += correction.getCorrection();
+                }
+
+
+                //System.out.println("calculateSatPosition 此卫星误差为G：" + observedSatellite.getSatId() + "," + accumulatedCorrection);
+
+                observedSatellite.setAccumulatedCorrection(accumulatedCorrection);
+            }
+
+
+
+
+
+
+            // Remove from the list all the satellites that did not pass the masking criteria
+            visibleButNotUsed += excludedSatellites.size();
+            observedSatellites.removeAll(excludedSatellites);
+            unusedSatellites.addAll(excludedSatellites);
+
+            //这是伪距定位时用到的卫星
+            //实时定位，所以清理之前的
+            SPPUsedSatellites.clear();
+
+            SPPUsedSatellites.addAll(observedSatellites);
+        }
+    }
+
+    @Override
     public double getSatelliteSignalStrength(int index) {
         synchronized (this) {
             return observedSatellites.get(index).getSignalStrength();
@@ -245,6 +372,18 @@ public class QzssConstellation extends Constellation {
             return constellationId;
         }
     }
+
+    @Override
+    public Time getTime() {
+        return timeRefMsec;
+    }
+
+    private List<SatelliteParameters> SPPUsedSatellites =new ArrayList<>();
+    @Override
+    public List<SatelliteParameters> getSPPUsedSatellites() {
+        return SPPUsedSatellites;
+    }
+
 
 
     @Override
@@ -260,6 +399,12 @@ public class QzssConstellation extends Constellation {
             return observedSatellites;
         }
     }
+
+    @Override
+    public List<SatelliteParameters> getUnusedSatellites() {
+        return unusedSatellites;
+    }
+
 
     @Override
     public int getVisibleConstellationSize() {

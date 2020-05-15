@@ -18,6 +18,12 @@ package com.gnss.gnssdatalogger.Constellations;
 
 import android.location.GnssMeasurementsEvent;
 
+
+import com.gnss.gnssdatalogger.Ntrip.GNSSEphemericsNtrip;
+import com.gnss.gnssdatalogger.coord.Coordinates;
+
+import org.ejml.simple.SimpleMatrix;
+
 import java.util.HashMap;
 import java.util.List;
 import java.util.Set;
@@ -32,11 +38,49 @@ import java.util.Set;
 public abstract class Constellation {
 
     /**
+     * Indicates if initialization has already been performed
+     */
+    private static boolean initialized = false;
+
+    private static String TAG = "Constellation";
+
+    protected static String RNP_NULL_MESSAGE = "RNP_NULL_MESSAGE";
+
+
+
+    /**
      * Additional definition of an ID for a new constellation type
      */
+    public static final int CONSTELLATION_GALILEO_GPS = 999; //todo is there a better way to define this?
     public static final int CONSTELLATION_GALILEO_IonoFree = 998; //todo is there a better way to define this?
     public static final int CONSTELLATION_GPS_IonoFree = 997; //todo is there a better way to define this?
 
+    /**
+     *
+     * @return the estimated receiver position
+     */
+    public abstract Coordinates getRxPos();
+
+    /**
+     *
+     * @param rxPos new estimated receiver position
+     */
+    public abstract void setRxPos(Coordinates rxPos);
+
+    /**
+     * Factory method for converting RxPos to a SimpleMatrix
+     * @param rxPos rxPos Coordinates object
+     * @return RxPos as a 4z1 vector
+     */
+    public static SimpleMatrix getRxPosAsVector(Coordinates rxPos){
+        SimpleMatrix rxPosSimpleVector = new SimpleMatrix(4, 1);
+        rxPosSimpleVector.set(0, rxPos.getX());
+        rxPosSimpleVector.set(1, rxPos.getY());
+        rxPosSimpleVector.set(2, rxPos.getZ());
+        rxPosSimpleVector.set(3, 0);
+
+        return rxPosSimpleVector;
+    }
 
     /**
      *
@@ -51,6 +95,13 @@ public abstract class Constellation {
      */
     public abstract List<SatelliteParameters> getSatellites();
 
+    public abstract List<SatelliteParameters> getUnusedSatellites();
+
+
+    /**
+     * 参与伪距定位的卫星列表
+     */
+    public abstract List<SatelliteParameters> getSPPUsedSatellites();
 
     /**
      *
@@ -63,8 +114,6 @@ public abstract class Constellation {
      * @return size of the used constellation
      */
     public abstract int getUsedConstellationSize();
-
-
 
 
     /**
@@ -81,6 +130,13 @@ public abstract class Constellation {
     public abstract int getConstellationId();
 
 
+
+    /**
+     *
+     * @return time of measurement
+     */
+    public abstract Time getTime();
+
     /**
      *
      * @return name of the constellation
@@ -93,4 +149,8 @@ public abstract class Constellation {
      * @param event GNSS event
      */
     public abstract void updateMeasurements(GnssMeasurementsEvent event);
+
+    public abstract void calculateSatPosition(GNSSEphemericsNtrip gnssEphemerisNtrip , Coordinates position);
+
+
 }

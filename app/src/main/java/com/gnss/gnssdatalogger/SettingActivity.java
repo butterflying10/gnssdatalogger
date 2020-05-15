@@ -85,7 +85,7 @@ public class SettingActivity extends AppCompatActivity {
         textViewBtnAntennaHeight = findViewById(R.id.setting_btnAntennaHeight);
         textViewBtnRestore = findViewById(R.id.setting_btnRestore);
 
-        sharedPreferences = getSharedPreferences(Constants.FILE_SETTING, 0);
+        sharedPreferences = getSharedPreferences(Constants.RINEX_SETTING, 0);
 
         reloadSettingText();
 

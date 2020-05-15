@@ -6,7 +6,6 @@
     <string name="satellite">Satellite</string>
     <string name="login">Login</string>
     <string name="register">Register</string>
-    <string name="password">Password</string>
     <string name="e_mail">E-Mail</string>
     <string name="please_login">Please login</string>
     <string name="please_fill">Please fill in your information</string>
@@ -35,6 +34,7 @@
     <string name="hyphen" translatable="false">-</string>
     <string name="file">文件</string>
     <string name="rinex" translatable="false">RINEX</string>
+    <string name="spp_title" translatable="false">SPP</string>
     <string name="setting">设置</string>
     <string name="open">打开</string>
     <string name="share">分享</string>
@@ -66,10 +66,10 @@
     <string name="longitude">Longitude :</string>
     <string name="altitude">Altitude :</string>
     <string name="gps_time">GPS Time >></string>
-    <string name="uploadposition">上传</string>
+    <string name="spp">定位</string>
     <string name="zero_5_digit" translatable="false">00.00000</string>
     <string name="zero_time" translatable="false">00:00:00</string>
-    <string name="zero_date" translatable="false">00/00/00</string>
+    <string name="zero_date" translatable="false">00/00/00</string>spp
     <string name="set">Set</string>
     <string name="hour">Hour</string>
     <string name="min">Min</string>
@@ -92,4 +92,21 @@
     <string name="Galileo" translatable="false">Galileo</string>
     <string name="arrow" translatable="false">------></string>
     <string name="description">Description</string>
+    
+    
+    <string name="sppmodle">定位模式</string>
+    <string name="sppmodle_default">伪距单点定位/伪距差分定位</string>
+    <string name="system_gnss">卫星系统选择</string>
+    <string name="system_gnss_default">GPS/GLO/GAL/BDS/QZSS</string>
+    <string name="ntripsetting">NTRIP</string>
+    <string name="host">host</string>
+    <string name="host_default">ntrip.gnsslab.cn</string>
+    <string name="port">port</string>
+    <string name="port_default">2101</string>
+    <string name="username">账号</string>
+    <string name="username_default">tfbai</string>
+    <string name="password">密码</string>
+    <string name="password_default">tfbai@2020</string>
+    <string name="spp_file">是否输出定位文件</string>
+
 </resources>

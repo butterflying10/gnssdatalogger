@@ -19,6 +19,7 @@ import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.StrictMode;
 import android.os.SystemClock;
 import android.util.Log;
 import android.view.View;
@@ -33,16 +34,23 @@ import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
 
 import com.adam.gpsstatus.GpsStatusProxy;
-import com.gnss.gnssdatalogger.Constellations.GpsGalileoBdsGlonassQzssConstellation;
+
+import com.gnss.gnssdatalogger.Constellations.GnssConstellation;
 import com.gnss.gnssdatalogger.Constellations.GpsTime;
 import com.gnss.gnssdatalogger.Constellations.Satellites.EpochMeasurement;
 import com.gnss.gnssdatalogger.Constellations.Satellites.GalileoSatellite;
 import com.gnss.gnssdatalogger.Constellations.Satellites.GpsSatellite;
 import com.gnss.gnssdatalogger.Constellations.Satellites.QzssSatellite;
 import com.gnss.gnssdatalogger.Nav.GpsNavigationConv;
+import com.gnss.gnssdatalogger.Ntrip.GNSSEphemericsNtrip;
+import com.gnss.gnssdatalogger.Ntrip.RTCM3Client;
+import com.gnss.gnssdatalogger.Ntrip.RTCM3ClientListener;
 import com.gnss.gnssdatalogger.RinexFileLogger.Rinex;
 import com.gnss.gnssdatalogger.RinexFileLogger.RinexHeader;
 import com.gnss.gnssdatalogger.RinexFileLogger.RinexNav;
+import com.gnss.gnssdatalogger.adjust.SPP_Result;
+import com.gnss.gnssdatalogger.adjust.WeightedLeastSquares;
+import com.gnss.gnssdatalogger.coord.Coordinates;
 
 import java.text.SimpleDateFormat;
 import java.util.Date;
@@ -90,7 +98,7 @@ public class RecordActivity extends AppCompatActivity {
     private ScrollView scrollViewLog;
     private LinearLayout linearLayoutGroupMenu;
 
-    private Button BtnUpload;
+    private Button BtnSpp;
     private Button BtnFile;
     private Button BtnSetting;
 
@@ -110,24 +118,48 @@ public class RecordActivity extends AppCompatActivity {
     private Handler handler;
 
     //观测值数据类
-    private GpsGalileoBdsGlonassQzssConstellation sumConstellation;
+    private GnssConstellation sumConstellation;
     //导航电文类
     private GpsNavigationConv gpsNavigationConv;
 
     //rinex观测值问件的获取
     private Rinex rinex;
+
     //主要用来获取setting的信息，或者没有加载setting之后，获取之前初始化的信息，在constants里面有定义
     private SharedPreferences sharedPreferences;
+
+    private SharedPreferences sharedPreferences_spp;
     //GPS时间
     private GpsTime gpsTime;
+
+
+
+    //参与运算的广播星历系统
+    private GNSSEphemericsNtrip mGNSSEphemericsNtrip;
+    /**
+     * Calculated pose of the receiver
+     */
+    private Coordinates pose;
+    /**
+     * 接收机位置的初始化
+     */
+    private boolean poseinitialized = false;
+    //平差
+    private WeightedLeastSquares mWeightedLeastSquares;
+    //平差结果输出
+    private SPP_Result mSPP_result;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_record);
 
-        mLocationManager = (LocationManager) this.getSystemService(LOCATION_SERVICE);
 
+        //这个是解决主线程没有网络连接问题的代码
+        StrictMode.ThreadPolicy policy = new StrictMode.ThreadPolicy.Builder().permitAll().build();
+        StrictMode.setThreadPolicy(policy);
+
+        mLocationManager = (LocationManager) this.getSystemService(LOCATION_SERVICE);
 
         //经度纬度高  XYZ
         textViewLatitude = findViewById(R.id.record_latitude);
@@ -162,8 +194,8 @@ public class RecordActivity extends AppCompatActivity {
         BtnFile = findViewById(R.id.record_btnFile);
         //设置
         BtnSetting = findViewById(R.id.record_btnSetting);
-        //上传设置，主要是将位置信息上传至服务器
-        BtnUpload = findViewById(R.id.record_btnUpload);
+        //定位设置--伪距单点定位和伪距差分定位
+        BtnSpp = findViewById(R.id.record_btnSpp);
 
         //各个系统卫星个数界面
         linearLayoutGroupMenu = findViewById(R.id.record_groupMenu);
@@ -195,21 +227,27 @@ public class RecordActivity extends AppCompatActivity {
         handler = new Handler();
 
         //这个是获取头文件信息
-        sharedPreferences = getSharedPreferences(Constants.FILE_SETTING, 0);
+        sharedPreferences = getSharedPreferences(Constants.RINEX_SETTING, 0);
+        //这个是获取SPP设置的信息
+        sharedPreferences_spp=getSharedPreferences(Constants.SPP_SETTING,0);
 
         //初始化卫星个数
         initTotalSatellite();
         //点击事件
         BtnFile.setOnClickListener(new onClickEvent());
         BtnSetting.setOnClickListener(new onClickEvent());
-        BtnUpload.setOnClickListener(new onClickEvent());
+        BtnSpp.setOnClickListener(new onClickEvent());
         textViewBtnStartStop.setOnClickListener(new onClickEvent());
         textViewBtnScrollDetail.setOnClickListener(new onClickEvent());
 
         //初始化观测值数据观测文件
-        sumConstellation = new GpsGalileoBdsGlonassQzssConstellation();
+        sumConstellation = new GnssConstellation(0,0,0,0,0);
         //初始化导航电文类
         gpsNavigationConv=new GpsNavigationConv(this);
+
+        //平差
+        mWeightedLeastSquares=new WeightedLeastSquares();
+
     }
 
     @Override
@@ -241,6 +279,9 @@ public class RecordActivity extends AppCompatActivity {
             //如果表明正在记录文件，则需要执行更新文件
             if(isRecord)
             {
+
+
+
                 rinex.writeBody(epochMeasurement);
                 handler.post(new Runnable() {
                     @Override
@@ -253,6 +294,29 @@ public class RecordActivity extends AppCompatActivity {
 
                     }
                 });
+
+                //计算卫星位置/平差计算
+                sumConstellation.calculateSatPosition(mGNSSEphemericsNtrip,pose);
+
+                Log.d(TAG, "----------------------------------------------------------------");
+
+                Log.d(TAG, "参与运算卫星数"+sumConstellation.getSPP_UsedSatellites().size());
+
+                if(sumConstellation.getSPP_UsedSatellites().size()>=5)
+                {
+
+                    Coordinates p =mWeightedLeastSquares.calculatePose(sumConstellation);
+
+                    if(sharedPreferences_spp.getInt(Constants.KEY_SPP_FILE,Constants.SPP_FILE)==Constants.SPP_FILE_YES)
+                    {
+                        mSPP_result.writeBody(p,sumConstellation.getTime());
+                    }
+
+                    //这里也是避免计算得到的接收机位置出现错误
+                    if(p!=null) pose=p;
+                }
+
+
             }
 
             for (GpsSatellite gpsSatellite : epochMeasurement.getGpsSatelliteList()) {
@@ -333,10 +397,14 @@ public class RecordActivity extends AppCompatActivity {
         @Override
         public void onLocationChanged(Location location) {
 
-            if (location != null) {
+            if (location != null&&!poseinitialized) {
 
                 mLocation=location;
                 try {
+                    //用于平差计算的接收机近似位置
+                    pose = Coordinates.globalGeodInstance(mLocation.getLatitude(), mLocation.getLongitude(), mLocation.getAltitude());
+
+
                     textViewLatitude.setText(String.format("%.5f", location.getLatitude()));
 
                     textViewLongtitude.setText(String.format("%.5f", location.getLongitude()));
@@ -359,7 +427,12 @@ public class RecordActivity extends AppCompatActivity {
                 } catch (Exception e) {
                     Log.d(TAG, "未获得定位结果");
                 }
+                //接收机位置是否初始化
+                poseinitialized=true;
             }
+
+            //获取接收机的位置
+
 
         }
 
@@ -493,7 +566,12 @@ public class RecordActivity extends AppCompatActivity {
         }
     }
 
-
+    private RTCM3ClientListener RTCMListener=new RTCM3ClientListener() {
+        @Override
+        public void onDataReceived(byte[] data) {
+            mGNSSEphemericsNtrip.onDataReceived(data);
+        }
+    };
     private class onClickEvent implements View.OnClickListener {
 
         @Override
@@ -549,25 +627,62 @@ public class RecordActivity extends AppCompatActivity {
                     if (!isRecord) {
                         animationClickStart();
 
-
                         startRecordRinex();
 
                         if(sharedPreferences.getInt(Constants.KEY_NAV, Constants.DEF_RINEX_NAV)==Constants.Nav_Yes)
                         {
                             startRecordRinexNav();
                         }
-                            isRecord = true;
+                        if(sharedPreferences_spp.getInt(Constants.KEY_SPP_FILE,Constants.SPP_FILE)==Constants.SPP_FILE_YES)
+                        {
+                            startRecordSPPResult();
+                        }
+
+                        isRecord = true;
+
+
+
+                        //从SPP  setting界面获取信息
+
+                        String host=sharedPreferences_spp.getString(Constants.KEY_NTRIP_HOST,Constants.DEF_NTRIP_HOST);
+
+                        int port=Integer.parseInt(sharedPreferences_spp .getString(Constants.KEY_NTRIP_PORT,Constants.DEF_NTRIP_PORT));
+
+                        String username=sharedPreferences_spp.getString(Constants.KEY_NTRIP_USERNAME,Constants.DEF_NTRIP_USERNAME);
+
+                        String password=sharedPreferences_spp.getString(Constants.KEY_NTRIP_PASSWORD,Constants.DEF_NTRIP_PASSWARD);
+
+                        //ntrip连接
+                        mGNSSEphemericsNtrip=new GNSSEphemericsNtrip(new RTCM3Client(host,port,"RTCM3EPH01", username,password, RTCMListener));
+                        new Thread(mGNSSEphemericsNtrip,"GNSS").start();
+
+
+                        //Log.d("click-start", "GPS"+sharedPreferences.getInt(Constants.KEY_GPS_SYSTEM,Constants.DEF_GPS_SYSTEM)+"GAL"+sharedPreferences.getInt(Constants.KEY_GAL_SYSTEM ,Constants.DEF_GAL_SYSTEM));
+                        //初始化观测数据类
+                        sumConstellation=new GnssConstellation(sharedPreferences_spp.getInt(Constants.KEY_GPS_SYSTEM,Constants.DEF_GPS_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_GAL_SYSTEM ,Constants.DEF_GAL_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_GLO_SYSTEM,Constants.DEF_GLO_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_BDS_SYSTEM,Constants.DEF_BDS_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_QZSS_SYSTEM,Constants.DEF_QZSS_SYSTEM));
+
 
                     } else {
                         stopRecordRinex();
+                        //停止ntrip连接
+                        mGNSSEphemericsNtrip.stopNtrip();
                         if(sharedPreferences.getInt(Constants.KEY_NAV, Constants.DEF_RINEX_NAV)==Constants.Nav_Yes)
                         {
                             stopRecordRinexNav();
                         }
+                        if(sharedPreferences_spp.getInt(Constants.KEY_SPP_FILE,Constants.SPP_FILE)==Constants.SPP_FILE_YES)
+                        {
+                            stopRecordSPPResult();
+                        }
                         animationClickStop();
                         isRecord = false;
                     }
-                case R.id.record_btnUpload:
+                    break;
+                case R.id.record_btnSpp:
+                    Log.i(TAG, "Click -> SPP ");
+                    startActivity(
+                            new Intent(RecordActivity.this, SPPActivity.class)
+                    );
                     break;
             }
         }
@@ -655,6 +770,20 @@ public class RecordActivity extends AppCompatActivity {
 
     private void stopRecordRinex() {
         rinex.closeFile();
+    }
+
+
+
+    private void startRecordSPPResult()
+    {
+        mSPP_result=new SPP_Result(getApplicationContext());
+        mSPP_result.writeHeader(pose);
+        mSPP_result.writeInfor(sharedPreferences_spp.getInt(Constants.KEY_SPP_MODEL, Constants.DEF_SPP_MODEL),sharedPreferences_spp.getInt(Constants.KEY_GPS_SYSTEM,Constants.DEF_GPS_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_GAL_SYSTEM ,Constants.DEF_GAL_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_GLO_SYSTEM,Constants.DEF_GLO_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_BDS_SYSTEM,Constants.DEF_BDS_SYSTEM),sharedPreferences_spp.getInt(Constants.KEY_QZSS_SYSTEM,Constants.DEF_QZSS_SYSTEM));
+
+    }
+    private void stopRecordSPPResult()
+    {
+        mSPP_result.closeFile();
     }
 }
 

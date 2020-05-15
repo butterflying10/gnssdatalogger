@@ -5,8 +5,18 @@ import android.location.GnssMeasurement;
 import android.location.GnssMeasurementsEvent;
 import android.location.GnssStatus;
 import android.os.Build;
+import android.util.Log;
 
+
+import com.gnss.gnssdatalogger.ConstantSystem;
 import com.gnss.gnssdatalogger.GNSSConstants;
+import com.gnss.gnssdatalogger.Ntrip.GNSSEphemericsNtrip;
+import com.gnss.gnssdatalogger.coord.Coordinates;
+import com.gnss.gnssdatalogger.coord.SatellitePosition;
+import com.gnss.gnssdatalogger.corrections.Correction;
+import com.gnss.gnssdatalogger.corrections.ShapiroCorrection;
+import com.gnss.gnssdatalogger.corrections.TopocentricCoordinates;
+import com.gnss.gnssdatalogger.corrections.TropoCorrection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -23,7 +33,7 @@ import java.util.List;
 
 public class BdsConstellation extends Constellation {
 
-    private final static char satType = 'C';
+    private final static char satType = ConstantSystem.BEIDOU_SYSTEM;
     private static final String NAME = "BDS B1";
     private static final String TAG = "BdsConstellation";
     private static double B1_FREQUENCY = 1.561098e9;
@@ -52,7 +62,7 @@ public class BdsConstellation extends Constellation {
     /**
      * Time of the measurement
      */
-    //private Time timeRefMsec;
+    private Time timeRefMsec;
 
     protected int visibleButNotUsed = 0;
 
@@ -61,22 +71,28 @@ public class BdsConstellation extends Constellation {
     private static final int MAXTOWUNCNS = 50;                                     // [nanoseconds]
 
 
+
+    /**
+     * Corrections which are to be applied to received pseudoranges
+     */
+    private ArrayList<Correction> corrections = new ArrayList<>();
     /**
      * List holding observed satellites
      */
     protected List<SatelliteParameters> observedSatellites = new ArrayList<>();
 
-    /**
-     * Corrections which are to be applied to received pseudoranges
-     */
+    public BdsConstellation() {
+        corrections.add(new ShapiroCorrection());
+        corrections.add(new TropoCorrection());
+    }
 
 
-//    @Override
-//    public Time getTime() {
-//        synchronized (this) {
-//            return timeRefMsec;
-//        }
-//    }
+    @Override
+    public Time getTime() {
+        synchronized (this) {
+            return timeRefMsec;
+        }
+    }
     @Override
     public String getName() {
         synchronized (this) {
@@ -97,7 +113,7 @@ public class BdsConstellation extends Constellation {
             unusedSatellites.clear();
             GnssClock gnssClock = event.getClock();
             long TimeNanos = gnssClock.getTimeNanos();
-            //timeRefMsec = new Time(System.currentTimeMillis());
+            timeRefMsec = new Time(System.currentTimeMillis());
             double BiasNanos = gnssClock.getBiasNanos();
             double gpsTime, pseudorange;
 
@@ -212,7 +228,7 @@ public class BdsConstellation extends Constellation {
                         observedSatellites.add(satelliteParameters);
 //                        Log.d(TAG, "updateConstellations(" + measurement.getSvid() + "): " + weekNumberNanos + ", " + tRxBDS + ", " + pseudorange);
 //                        Log.d(TAG, "updateConstellations: Passed with measurement state: " + measState);
-//                        Log.d(TAG, "Time: " + satelliteParameters.getGpsTime().getGpsTimeString()+",phase"+satelliteParameters.getPhase()+",snr"+satelliteParameters.getSnr()+",doppler"+satelliteParameters.getDoppler());
+////                        Log.d(TAG, "Time: " + satelliteParameters.getGpsTime().getGpsTimeString()+",phase"+satelliteParameters.getPhase()+",snr"+satelliteParameters.getSnr()+",doppler"+satelliteParameters.getDoppler());
 //
 
                     }
@@ -238,17 +254,109 @@ public class BdsConstellation extends Constellation {
     }
 
     @Override
+    public void calculateSatPosition(GNSSEphemericsNtrip beidouEphemerisNtrip , Coordinates position) {
+
+        // Make a list to hold the satellites that are to be excluded based on elevation/CN0 masking criteria
+        List<SatelliteParameters> excludedSatellites = new ArrayList<>();
+
+        synchronized (this) {
+
+            rxPos = Coordinates.globalXYZInstance(position.getX(), position.getY(), position.getZ());
+
+            for (SatelliteParameters observedSatellite : observedSatellites) {
+                // Computation of the GPS satellite coordinates in ECEF frame
+                // Determine the current GPS week number
+                int gpsWeek = (int) (weekNumberNanos / GNSSConstants.NUMBER_NANO_SECONDS_PER_WEEK);
+
+                // Time of signal reception in GPS Seconds of the Week (SoW)
+                double gpsSow = (tRxBDS - weekNumberNanos) * 1e-9;
+
+                Time tGPS = new Time(gpsWeek, gpsSow);
+
+                // Convert the time of reception from GPS SoW to UNIX time (milliseconds)
+                long timeRx = tGPS.getMsec();
+
+                SatellitePosition rnp = beidouEphemerisNtrip .getSatPositionAndVelocities(
+                        timeRx,
+                        observedSatellite.getPseudorange(),
+                        observedSatellite.getSatId(),
+                        satType,
+                        0.0);
+
+                if (rnp == null) {
+                    excludedSatellites.add(observedSatellite);
+                    continue;
+                }
+
+                observedSatellite.setSatellitePosition(rnp);
+
+                observedSatellite.setRxTopo(
+                        new TopocentricCoordinates(
+                                rxPos,
+                                observedSatellite.getSatellitePosition()));
+
+                // Add to the exclusion list the satellites that do not pass the masking criteria
+                if (observedSatellite.getRxTopo().getElevation() < MASK_ELEVATION) {
+                    excludedSatellites.add(observedSatellite);
+                }
+                Log.d(TAG,observedSatellite.getUniqueSatId()+"高度角："+observedSatellite.getRxTopo().getElevation());
+
+                double accumulatedCorrection = 0;
+
+                for (Correction correction : corrections) {
+
+                    correction.calculateCorrection(
+                            new Time(timeRx),
+                            rxPos,
+                            observedSatellite.getSatellitePosition()
+                            );
+
+                    accumulatedCorrection += correction.getCorrection();
+                }
+
+                observedSatellite.setAccumulatedCorrection(accumulatedCorrection);
+            }
+
+            // Remove from the list all the satellites that did not pass the masking criteria
+            visibleButNotUsed += excludedSatellites.size();
+            observedSatellites.removeAll(excludedSatellites);
+            unusedSatellites.addAll(excludedSatellites);
+
+            //这是伪距定位时用到的卫星
+            //实时定位，所以清理之前的
+            SPPUsedSatellites.clear();
+            SPPUsedSatellites.addAll(observedSatellites);
+        }
+    }
+
+    @Override
     public double getSatelliteSignalStrength(int index) {
         synchronized (this) {
             return observedSatellites.get(index).getSignalStrength();
         }
     }
-
+    private List<SatelliteParameters> SPPUsedSatellites =new ArrayList<>();
+    @Override
+    public List<SatelliteParameters> getSPPUsedSatellites() {
+        return SPPUsedSatellites;
+    }
     @Override
     public int getConstellationId() {
         synchronized (this) {
             return constellationId;
         }
+    }
+
+
+    private Coordinates rxPos;
+    @Override
+    public Coordinates getRxPos() {
+        return rxPos;
+    }
+
+    @Override
+    public void setRxPos(Coordinates rxPos) {
+        this.rxPos=rxPos;
     }
 
     @Override
@@ -263,6 +371,11 @@ public class BdsConstellation extends Constellation {
         synchronized (this) {
             return observedSatellites;
         }
+    }
+
+    @Override
+    public List<SatelliteParameters> getUnusedSatellites() {
+        return null;
     }
 
     @Override

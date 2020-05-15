@@ -8,7 +8,15 @@ import android.os.Build;
 import android.util.Log;
 
 
+import com.gnss.gnssdatalogger.ConstantSystem;
 import com.gnss.gnssdatalogger.GNSSConstants;
+import com.gnss.gnssdatalogger.Ntrip.GNSSEphemericsNtrip;
+import com.gnss.gnssdatalogger.coord.Coordinates;
+import com.gnss.gnssdatalogger.coord.SatellitePosition;
+import com.gnss.gnssdatalogger.corrections.Correction;
+import com.gnss.gnssdatalogger.corrections.ShapiroCorrection;
+import com.gnss.gnssdatalogger.corrections.TopocentricCoordinates;
+import com.gnss.gnssdatalogger.corrections.TropoCorrection;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -18,7 +26,7 @@ import java.util.List;
  */
 
 public class GalileoConstellation extends Constellation {
-    private final static char satType = 'E';
+    private final static char satType = ConstantSystem.GALILEO_SYSTEM;
     protected static final String NAME = "Galileo E1";
     private static final String TAG = "GalileoE1Constellation";
     private static int constellationId = GnssStatus.CONSTELLATION_GALILEO;
@@ -28,8 +36,13 @@ public class GalileoConstellation extends Constellation {
     private static final double MASK_CN0 = 10; // dB-Hz
 
 
+
+
+
     private boolean fullBiasNanosInitialized = false;
     private long FullBiasNanos;
+
+    private Coordinates rxPos;
 
 
     protected double tRxGalileoTOW;
@@ -47,7 +60,7 @@ public class GalileoConstellation extends Constellation {
     /**
      * Time of the measurement
      */
-    //private Time timeRefMsec;
+    private Time timeRefMsec;
 
     protected int visibleButNotUsed = 0;
 
@@ -72,41 +85,33 @@ public class GalileoConstellation extends Constellation {
     /**
      * Corrections which are to be applied to received pseudoranges
      */
-    //private ArrayList<Correction> corrections = new ArrayList<>();
+    private ArrayList<Correction> corrections = new ArrayList<>();
 
-//    public GalileoConstellation() {
-//        // URL template from where the Galileo ephemerides should be downloaded
-//        //String GNSS_BEV_GALILEO_RINEX = "ftp://gnss.bev.gv.at/pub/nrt/${ddd}/${yy}/bute${ddd}s.${yy}l.Z";
-//        String IGS_GALILEO_RINEX = "ftp://igs.bkg.bund.de/IGS/BRDC/${yyyy}/${ddd}/BRDC00WRD_R_${yyyy}${ddd}0000_01D_EN.rnx.gz";
-//        //String EUREF_GALILEO_RINEX = "ftp://igs.bkg.bund.de/EUREF/BRDC/${yyyy}/${ddd}/BRDC00WRD_R_${yyyy}${ddd}0000_01D_EN.rnx.gz";
-//
-//
-//        // Declare a RinexNavigation type object
-//        if (rinexNavGalileo == null)
-//            rinexNavGalileo = new RinexNavigationGalileo(IGS_GALILEO_RINEX);
-//    }
-    public static boolean approximateEqual(double a, double b, double eps) {
-        return Math.abs(a - b) < eps;
+    public GalileoConstellation()
+    {
+        corrections.add(new ShapiroCorrection());
+        corrections.add(new TropoCorrection());
     }
 
-//    @Override
-//    public void addCorrections(ArrayList<Correction> corrections) {
-//        synchronized (this) {
-//            this.corrections = corrections;
-//        }
-//    }
-
-//    @Override
-//    public Time getTime() {
-//        synchronized (this) {
-//            return timeRefMsec;
-//        }
-//    }
+    @Override
+    public Time getTime() {
+        synchronized (this) {
+            return timeRefMsec;
+        }
+    }
 
     @Override
     public String getName() {
         return NAME;
     }
+
+    public static boolean approximateEqual(double a, double b, double eps) {
+        return Math.abs(a - b) < eps;
+    }
+
+
+
+
 
     @Override
     public void updateMeasurements(GnssMeasurementsEvent event) {
@@ -118,7 +123,7 @@ public class GalileoConstellation extends Constellation {
 
             GnssClock gnssClock = event.getClock();
             long TimeNanos = gnssClock.getTimeNanos();
-            //timeRefMsec = new Time(System.currentTimeMillis());
+            timeRefMsec = new Time(System.currentTimeMillis());
             double BiasNanos = gnssClock.getBiasNanos();
             double galileoTime, pseudorangeTOW, pseudorangeE1_2nd, tTxGalileo;
 
@@ -271,9 +276,9 @@ public class GalileoConstellation extends Constellation {
                     double doppler = measurement.getPseudorangeRateMetersPerSecond() / λ;
                     satelliteParameters.setDoppler(doppler);
                     observedSatellites.add(satelliteParameters);
-                    Log.d(TAG, "updateConstellations(" + measurement.getSvid() + "): " + weekNumber + ", " + tRxGalileoTOW + ", " + pseudorangeE1_2nd);
-                    Log.d(TAG, "updateConstellations: Passed with measurement state: " + measState);
-                    Log.d(TAG, "Time: " + satelliteParameters.getGpsTime().getGpsTimeString() + ",phase" + satelliteParameters.getPhase() + ",snr" + satelliteParameters.getSnr() + ",doppler" + satelliteParameters.getDoppler());
+                  //  Log.d(TAG, "updateConstellations(" + measurement.getSvid() + "): " + weekNumber + ", " + tRxGalileoTOW + ", " + pseudorangeE1_2nd);
+                  //  Log.d(TAG, "updateConstellations: Passed with measurement state: " + measState);
+                 //   Log.d(TAG, "Time: " + satelliteParameters.getGpsTime().getGpsTimeString() + ",phase" + satelliteParameters.getPhase() + ",snr" + satelliteParameters.getSnr() + ",doppler" + satelliteParameters.getDoppler());
                 } else {
                     SatelliteParameters satelliteParameters = new SatelliteParameters(new GpsTime(gnssClock),
                             measurement.getSvid(),
@@ -295,6 +300,95 @@ public class GalileoConstellation extends Constellation {
     }
 
     @Override
+    public void calculateSatPosition(GNSSEphemericsNtrip galileoEphemerisNtrip, Coordinates position) {
+
+        // Make a list to hold the satellites that are to be excluded based on elevation/CN0 masking criteria
+        List<SatelliteParameters> excludedSatellites = new ArrayList<>();
+
+
+        synchronized (this) {
+            System.out.println("此历元galileo卫星数：" + observedSatellites.size());
+
+
+            //接收机的位置，这里用接收机的位置主要是为了计算对流层延迟
+            rxPos = Coordinates.globalXYZInstance(position.getX(), position.getY(), position.getZ());
+
+            //System.out.println("接收机近似位置：" + position.getX() + "," + position.getY() + "," + position.getZ());
+
+            for (SatelliteParameters observedSatellite : observedSatellites) {
+                // Computation of the GPS satellite coordinates in ECEF frame
+
+                // Determine the current GPS week number
+                int galileoWeek =(int) weekNumber;
+
+                double galileoSow = (tRxGalileoTOW) * 1e-9;
+                Time tGalileo = new Time(galileoWeek, galileoSow);
+
+                // Convert the time of reception from GPS SoW to UNIX time (milliseconds)
+                long timeRx = tGalileo.getMsec();
+                //System.out.println("卫星"+observedSatellite.getUniqueSatId()+"   "+timeRx);
+
+
+                SatellitePosition rnp = galileoEphemerisNtrip.getSatPositionAndVelocities(
+                        timeRx,
+                        observedSatellite.getPseudorange(),
+                        observedSatellite.getSatId(),
+                        satType,
+                        0.0
+                );
+
+                if (rnp == null) {
+                    excludedSatellites.add(observedSatellite);
+                    //GnssCoreService.notifyUser("Failed getting ephemeris data!", Snackbar.LENGTH_SHORT, RNP_NULL_MESSAGE);
+                    continue;
+                }
+
+                observedSatellite.setSatellitePosition(rnp);
+
+                observedSatellite.setRxTopo(
+                        new TopocentricCoordinates(
+                                rxPos,
+                                observedSatellite.getSatellitePosition()));
+
+                //Add to the exclusion list the satellites that do not pass the masking criteria
+                if (observedSatellite.getRxTopo().getElevation() < MASK_ELEVATION) {
+                    excludedSatellites.add(observedSatellite);
+                }
+                System.out.println("calculateSatPosition  此卫星高度角"+observedSatellite.getRxTopo().getElevation()+"\\"+observedSatellite.getRxTopo().getAzimuth());
+
+                double accumulatedCorrection = 0;
+                //计算累计的误差，包括对流层延迟
+                for (Correction correction : corrections) {
+
+                    correction.calculateCorrection(
+                            new Time(timeRx),
+                            rxPos,
+                            observedSatellite.getSatellitePosition()
+                    );
+
+                    accumulatedCorrection += correction.getCorrection();
+
+                }
+                // System.out.println("galileo此卫星误差为E：" + observedSatellite.getSatId() + "," + accumulatedCorrection);
+
+
+                observedSatellite.setAccumulatedCorrection(accumulatedCorrection);
+            }
+
+            // Remove from the list all the satellites that did not pass the masking criteria
+            visibleButNotUsed += excludedSatellites.size();
+            observedSatellites.removeAll(excludedSatellites);
+            unusedSatellites.addAll(excludedSatellites);
+
+            //这是伪距定位时用到的卫星
+            //实时定位，所以清理之前的
+            SPPUsedSatellites.clear();
+            SPPUsedSatellites.addAll(observedSatellites);
+        }
+    }
+
+
+    @Override
     public double getSatelliteSignalStrength(int index) {
         synchronized (this) {
             return observedSatellites.get(index).getSignalStrength();
@@ -308,6 +402,21 @@ public class GalileoConstellation extends Constellation {
         }
     }
 
+
+
+    @Override
+    public Coordinates getRxPos() {
+        synchronized (this) {
+            return rxPos;
+        }
+    }
+
+    @Override
+    public void setRxPos(Coordinates rxPos) {
+        synchronized (this) {
+            this.rxPos = rxPos;
+        }
+    }
 
     @Override
     public SatelliteParameters getSatellite(int index) {
@@ -323,6 +432,16 @@ public class GalileoConstellation extends Constellation {
         }
     }
 
+    @Override
+    public List<SatelliteParameters> getUnusedSatellites() {
+        return unusedSatellites;
+    }
+
+    private List<SatelliteParameters> SPPUsedSatellites=new ArrayList<>();
+    @Override
+    public List<SatelliteParameters> getSPPUsedSatellites() {
+        return this.SPPUsedSatellites;
+    }
 
     @Override
     public int getVisibleConstellationSize() {
@@ -330,6 +449,7 @@ public class GalileoConstellation extends Constellation {
             return getUsedConstellationSize() + visibleButNotUsed;
         }
     }
+
 
     @Override
     public int getUsedConstellationSize() {

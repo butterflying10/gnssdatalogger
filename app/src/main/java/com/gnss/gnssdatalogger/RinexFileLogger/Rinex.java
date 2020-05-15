@@ -78,7 +78,7 @@ public class Rinex {
             yearString = "0" + year;
         else
             yearString = "" + year;
-        String fileName = "GN" + dateString + ver + "." + yearString + type;
+        String fileName = "OB" + dateString + ver + "." + yearString + type;
 
         try {
             File rootFile = new File(context.getFilesDir().getAbsolutePath(), context.getString(R.string.app_name) + "_Rinex");

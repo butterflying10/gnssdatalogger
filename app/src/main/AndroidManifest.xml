@@ -16,6 +16,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/AppTheme">
+        <activity android:name=".SPPActivity"></activity>
         <activity android:name=".RecordActivity">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -23,12 +24,8 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-        <activity android:name=".SettingActivity">
-
-        </activity>
-        <activity android:name=".FileActivity">
-
-        </activity>
+        <activity android:name=".SettingActivity"></activity>
+        <activity android:name=".FileActivity"></activity>
 
         <provider
             android:name="androidx.core.content.FileProvider"
@@ -37,7 +34,7 @@
             android:grantUriPermissions="true">
             <meta-data
                 android:name="android.support.FILE_PROVIDER_PATHS"
-                android:resource="@xml/provider_paths"/>
+                android:resource="@xml/provider_paths" />
         </provider>
     </application>
 

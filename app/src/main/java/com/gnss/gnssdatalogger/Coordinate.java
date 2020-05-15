@@ -1,7 +1,7 @@
 package com.gnss.gnssdatalogger;
 
 /**
- * 主要实现在wgs84椭球下  大地坐标系转为WGS84控件直角坐标系
+ * 主要实现在wgs84椭球下  大地坐标系转为WGS84空间直角坐标系
  * 白腾飞
  * 202.3.26
  */
