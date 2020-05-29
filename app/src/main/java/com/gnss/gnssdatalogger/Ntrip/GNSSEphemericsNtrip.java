@@ -240,6 +240,10 @@ public class GNSSEphemericsNtrip extends EphemerisSystem implements RTCM3ClientL
             return SatellitePosition.UnhealthySat;
         SatellitePosition satellitePosition=computeSatPositionAndVelocities(unixTime,range,satID,satType, ephGps,receiverClockError);
 
+        if(satellitePosition==null)
+        {
+            return null;
+        }
         return satellitePosition;
 
     }

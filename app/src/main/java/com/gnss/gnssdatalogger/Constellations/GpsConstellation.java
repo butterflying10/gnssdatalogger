@@ -148,6 +148,9 @@ public class GpsConstellation extends Constellation {
                     if (!approximateEqual(measurement.getCarrierFrequencyHz(), L1_FREQUENCY, FREQUENCY_MATCH_RANGE))
                         continue;
                 long ReceivedSvTimeNanos = measurement.getReceivedSvTimeNanos();
+
+                //Log.d(TAG,"G"+measurement.getSvid()+":"+measurement.getReceivedSvTimeNanos());
+
                 double TimeOffsetNanos = measurement.getTimeOffsetNanos();
 
                 // GPS Time generation (GSA White Paper - page 20)
@@ -159,7 +162,6 @@ public class GpsConstellation extends Constellation {
                 // week number)
                 tRxGPS =
                         gpsTime + TimeOffsetNanos;
-
 
                 weekNumberNanos =
                         Math.floor((-1. * FullBiasNanos) / GNSSConstants.NUMBER_NANO_SECONDS_PER_WEEK)
@@ -223,6 +225,7 @@ public class GpsConstellation extends Constellation {
                     if (measurement.hasSnrInDb()) {
                         satelliteParameters.setSnr(measurement.getSnrInDb());
                     }
+                    Log.d(TAG,"snr:"+measurement.getSnrInDb());
                     /**
                      获取多普勒值
                      */

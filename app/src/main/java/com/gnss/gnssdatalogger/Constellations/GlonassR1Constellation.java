@@ -33,7 +33,7 @@ public class GlonassR1Constellation extends Constellation {
      */
     private Time timeRefMsec;
     private Coordinates rxPos;
-
+    private boolean fullBiasNanosInitialized = false;
     protected double tRxGlonass;
     protected double weekNumberNanos;
     protected double tRx;
@@ -100,10 +100,10 @@ public class GlonassR1Constellation extends Constellation {
             double gpsTime, pseudorange;
 
             // Use only the first instance of the FullBiasNanos (as done in gps-measurement-tools)
-//            if (!fullBiasNanosInitialized) {
+            if (!fullBiasNanosInitialized) {
             FullBiasNanos = gnssClock.getFullBiasNanos();
-//                fullBiasNanosInitialized = true;
-//            }+
+                fullBiasNanosInitialized = true;
+            }
 
             // Start computing the pseudoranges using the raw data from the phone's GNSS receiver
             for (GnssMeasurement measurement : event.getMeasurements()) {
@@ -111,20 +111,17 @@ public class GlonassR1Constellation extends Constellation {
                 if (measurement.getConstellationType() != constellationId)
                     continue;
 
-//                if (measurement.hasCarrierFrequencyHz())
-//                    if (!approximateEqual(measurement.getCarrierFrequencyHz(), L1_FREQUENCY, FREQUENCY_MATCH_RANGE))
-//                        continue;
-
                 //&& (measurement.getState() & (1L << 3)) != 0
 
-                if (measurement.getCn0DbHz() >= 18) {
+                //if (measurement.getCn0DbHz() >= 18)
+                //{
                     int measState = measurement.getState();
 
                     long ReceivedSvTimeNanos = measurement.getReceivedSvTimeNanos();
                     double TimeOffsetNanos = measurement.getTimeOffsetNanos();
 
                     // GPS Time generation (GSA White Paper - page 20)
-                    gpsTime = TimeNanos + TimeOffsetNanos - (FullBiasNanos + BiasNanos); // TODO intersystem bias?
+                    gpsTime = TimeNanos  - (FullBiasNanos + BiasNanos); // TODO intersystem bias?
 
                     // Measurement time in full GPS time without taking into account weekNumberNanos(the number of
                     // nanoseconds that have occurred from the beginning of GPS time to the current
@@ -135,11 +132,13 @@ public class GlonassR1Constellation extends Constellation {
                             * GNSSConstants.NUMBER_NANO_SECONDS_PER_WEEK;
 
                     double tRxNanos = gnssClock.getTimeNanos() - FullBiasNanos - weekNumberNanos;
-                    tRx = gpsTime;
-                    tRxGlonass = gpsTime - dayNumberNanos + 10800e9 - 18e9;
+                    tRx= gpsTime+ TimeOffsetNanos;
+                    tRxGlonass = tRx - dayNumberNanos + 10800e9 - 18e9;
+
+                    //Log.d(TAG,"tRxGlonass:"+tRxGlonass);
 
 
-                    double tRxSeconds = (tRxNanos - measurement.getTimeOffsetNanos()) * 1e-9;
+                    double tRxSeconds = (tRxNanos + measurement.getTimeOffsetNanos()) * 1e-9;
                     double tTxSeconds = measurement.getReceivedSvTimeNanos() * 1e-9;
                     double tRxSeconds_GLO = tRxSeconds % 86400;
                     double tTxSeconds_GLO = tTxSeconds - 10800 + 18;
@@ -155,19 +154,27 @@ public class GlonassR1Constellation extends Constellation {
 //                        tRxGlonass -= 86400e9;
 //                    }
 
+                    /*另一种方法*/
 
+                     pseudorange=(tRxGlonass-measurement.getReceivedSvTimeNanos())*1e-9*GNSSConstants.SPEED_OF_LIGHT;
 
                     // GPS pseudorange computation
-                    pseudorange = (tRxSeconds-tTxSeconds)
+                    double pseudorange1 = (tRxSeconds-tTxSeconds)
                             * GNSSConstants.SPEED_OF_LIGHT;
+
+                    Log.d(TAG,"旧的方法："+pseudorange1+"新方法："+pseudorange);
+
+
+
+
 //
 //                    // Bitwise AND to identify the states
                     boolean codeLock = (measState & GnssMeasurement.STATE_CODE_LOCK) != 0;
 
-                    if (codeLock && pseudorange < 1e9 && pseudorange > 0) { // && towUncertainty
+                    if ( codeLock &&pseudorange1 < 1e9 && pseudorange1 > 0) { // && towUncertainty
                         SatelliteParameters satelliteParameters = new SatelliteParameters(new GpsTime(gnssClock),
                                 measurement.getSvid(),
-                                new Pseudorange(pseudorange, 0.0));
+                                new Pseudorange(pseudorange1, 0.0));
 
                         satelliteParameters.setUniqueSatId(String.format("R%02d_R1", satelliteParameters.getSatId()));
 
@@ -206,30 +213,37 @@ public class GlonassR1Constellation extends Constellation {
                         }
 
                         observedSatellites.add(satelliteParameters);
-//                        Log.d(TAG, "updateConstellations(" + measurement.getSvid() + "): " + weekNumberNanos + ", " + tRxGlonass + ", " + pseudorange);
-//                        Log.d(TAG, "updateConstellations: Passed with measurement state: " + measState);
-//                        Log.d(TAG, "Time: " + satelliteParameters.getGpsTime().getGpsTimeString()+",phase"+satelliteParameters.getPhase()+",snr"+satelliteParameters.getSnr()+",doppler"+satelliteParameters.getDoppler());
+                        Log.d(TAG, "updateConstellations(" + measurement.getSvid() + "): " + weekNumberNanos + ", " + tRxGlonass + ", " + pseudorange);
+                        Log.d(TAG, "updateConstellations: Passed with measurement state: " + measState);
+                        Log.d(TAG, "Time: " + satelliteParameters.getGpsTime().getGpsTimeString()+",phase"+satelliteParameters.getPhase()+",snr"+satelliteParameters.getSnr()+",doppler"+satelliteParameters.getDoppler());
                     }
-                } else {
-                    SatelliteParameters satelliteParameters = new SatelliteParameters(new GpsTime(gnssClock),
-                            measurement.getSvid(),
-                            null);
 
-                    satelliteParameters.setUniqueSatId(String.format("R%02d_R1", satelliteParameters.getSatId()));
 
-                    satelliteParameters.setSignalStrength(measurement.getCn0DbHz());
+                    else {
+                        SatelliteParameters satelliteParameters = new SatelliteParameters(new GpsTime(gnssClock),
+                                measurement.getSvid(),
+                                null);
 
-                    satelliteParameters.setConstellationType(measurement.getConstellationType());
+                        satelliteParameters.setUniqueSatId(String.format("R%02d_R1", satelliteParameters.getSatId()));
 
-                    if (measurement.hasCarrierFrequencyHz())
-                        satelliteParameters.setCarrierFrequency(measurement.getCarrierFrequencyHz());
+                        Log.d(TAG,",,,,,,,,,,,");
+                        satelliteParameters.setSignalStrength(measurement.getCn0DbHz());
 
-                    unusedSatellites.add(satelliteParameters);
-                    visibleButNotUsed++;
+                        satelliteParameters.setConstellationType(measurement.getConstellationType());
+
+                        if (measurement.hasCarrierFrequencyHz())
+                            satelliteParameters.setCarrierFrequency(measurement.getCarrierFrequencyHz());
+
+                        unusedSatellites.add(satelliteParameters);
+                        visibleButNotUsed++;
+                    }
+
                 }
+
+
             }
         }
-    }
+    //}
 
 
 

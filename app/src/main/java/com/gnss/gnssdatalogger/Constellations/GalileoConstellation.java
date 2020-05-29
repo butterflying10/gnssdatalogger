@@ -32,7 +32,7 @@ public class GalileoConstellation extends Constellation {
     private static int constellationId = GnssStatus.CONSTELLATION_GALILEO;
     private static final double E1a_FREQUENCY = 1.57542e9;
     private static final double FREQUENCY_MATCH_RANGE = 0.1e9;
-    private static final double MASK_ELEVATION = 15; // degrees
+    private static final double MASK_ELEVATION = 20; // degrees
     private static final double MASK_CN0 = 10; // dB-Hz
 
 

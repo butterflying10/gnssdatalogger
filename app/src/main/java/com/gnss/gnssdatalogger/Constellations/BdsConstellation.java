@@ -44,6 +44,7 @@ public class BdsConstellation extends Constellation {
 
 
     protected double tRxBDS;
+    protected double tRxGPS;
     protected double weekNumberNanos;
     private List<SatelliteParameters> unusedSatellites = new ArrayList<>();
 
@@ -118,10 +119,10 @@ public class BdsConstellation extends Constellation {
             double gpsTime, pseudorange;
 
             // Use only the first instance of the FullBiasNanos (as done in gps-measurement-tools)
-//            if (!fullBiasNanosInitialized) {
+           if (!fullBiasNanosInitialized) {
             FullBiasNanos = gnssClock.getFullBiasNanos();
-//                fullBiasNanosInitialized = true;
-//            }+
+                fullBiasNanosInitialized = true;
+            }
 
             // Start computing the pseudoranges using the raw data from the phone's GNSS receiver
             for (GnssMeasurement measurement : event.getMeasurements()) {
@@ -133,7 +134,9 @@ public class BdsConstellation extends Constellation {
 //                    if (!approximateEqual(measurement.getCarrierFrequencyHz(), B1_FREQUENCY, FREQUENCY_MATCH_RANGE))
 //                        continue;
 
-                if (measurement.getCn0DbHz() >= 18 && (measurement.getState() & (1L << 3)) != 0) {
+                //measurement.getCn0DbHz() >= 18 &&
+                if ( (measurement.getState() & (1L << 3)) != 0)
+                {
 
                     // excluding satellites which don't have the L5 component
 //                if(measurement.getSvid() == 2 || measurement.getSvid() == 4
@@ -149,6 +152,9 @@ public class BdsConstellation extends Constellation {
 //                    continue;
 
                     long ReceivedSvTimeNanos = measurement.getReceivedSvTimeNanos();
+
+                    //Log.d(TAG,"C"+measurement.getSvid()+":"+measurement.getReceivedSvTimeNanos());
+
                     double TimeOffsetNanos = measurement.getTimeOffsetNanos();
 
                     // GPS Time generation (GSA White Paper - page 20)
@@ -157,6 +163,8 @@ public class BdsConstellation extends Constellation {
                     // Measurement time in full GPS time without taking into account weekNumberNanos(the number of
                     // nanoseconds that have occurred from the beginning of GPS time to the current
                     // week number)
+
+                    tRxGPS=gpsTime+TimeOffsetNanos;
                     tRxBDS = gpsTime + TimeOffsetNanos - 14e9;
 
                     weekNumberNanos = Math.floor((-1. * FullBiasNanos) / GNSSConstants.NUMBER_NANO_SECONDS_PER_WEEK)
@@ -232,23 +240,26 @@ public class BdsConstellation extends Constellation {
 //
 
                     }
-                } else {
-                    SatelliteParameters satelliteParameters = new SatelliteParameters(new GpsTime(gnssClock),
-                            measurement.getSvid(),
-                            null);
+                    else {
+                        SatelliteParameters satelliteParameters = new SatelliteParameters(new GpsTime(gnssClock),
+                                measurement.getSvid(),
+                                null);
 
-                    satelliteParameters.setUniqueSatId("C" + satelliteParameters.getSatId() + "_B1");
+                        satelliteParameters.setUniqueSatId("C" + satelliteParameters.getSatId() + "_B1");
 
-                    satelliteParameters.setSignalStrength(measurement.getCn0DbHz());
+                        satelliteParameters.setSignalStrength(measurement.getCn0DbHz());
 
-                    satelliteParameters.setConstellationType(measurement.getConstellationType());
+                        satelliteParameters.setConstellationType(measurement.getConstellationType());
 
-                    if (measurement.hasCarrierFrequencyHz())
-                        satelliteParameters.setCarrierFrequency(measurement.getCarrierFrequencyHz());
+                        if (measurement.hasCarrierFrequencyHz())
+                            satelliteParameters.setCarrierFrequency(measurement.getCarrierFrequencyHz());
 
-                    unusedSatellites.add(satelliteParameters);
-                    visibleButNotUsed++;
+                        unusedSatellites.add(satelliteParameters);
+                        visibleButNotUsed++;
+                    }
+
                 }
+
             }
         }
     }
@@ -269,7 +280,7 @@ public class BdsConstellation extends Constellation {
                 int gpsWeek = (int) (weekNumberNanos / GNSSConstants.NUMBER_NANO_SECONDS_PER_WEEK);
 
                 // Time of signal reception in GPS Seconds of the Week (SoW)
-                double gpsSow = (tRxBDS - weekNumberNanos) * 1e-9;
+                double gpsSow = (tRxGPS - weekNumberNanos) * 1e-9;
 
                 Time tGPS = new Time(gpsWeek, gpsSow);
 

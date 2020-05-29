@@ -369,8 +369,8 @@ public class DecodeEphData {
 
         ephGlonass.setRefTime(toftime);
         toe = tb * 900.0 - 10800.0; /* lt->utc */
-        System.out.println("tb" + tb);
-        System.out.println("toe" + toe);
+//        System.out.println("tb" + tb);
+//        System.out.println("toe" + toe);
         if (toe < tod - 43200.0) toe += 86400.0;
         else if (toe > tod + 43200.0) toe -= 86400.0;
 

@@ -36,7 +36,7 @@ public class WeightedLeastSquares {
 
     private final static String NAME = "Weighted Least Squares";
 
-    private final int NUMBER_OF_ITERATIONS = 50;
+    private final int NUMBER_OF_ITERATIONS = 1000;
     private final static String TAG="WLS";
 
     //private final static Coordinates ZERO_POSE = Coordinates.globalGeodInstance(51.000, 3.000, 0.000); // Right at the edge of the plot

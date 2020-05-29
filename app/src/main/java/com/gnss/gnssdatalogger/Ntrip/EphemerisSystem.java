@@ -69,6 +69,12 @@ public abstract class EphemerisSystem {
 
             // Compute eccentric anomaly
             double Ek = computeEccentricAnomaly(tGPS, eph);
+            if(Ek ==0)
+            {
+                return null;
+            }
+
+
 
             // Semi-major axis
             double A = eph.getRootA() * eph.getRootA();
@@ -663,18 +669,20 @@ public abstract class EphemerisSystem {
         double EkOld, dEk;
 
         // Eccentric anomaly iterative computation
-        int maxNumIter = 12;
+        int maxNumIter = 1000;
         for (i = 0; i < maxNumIter; i++) {
             EkOld = Ek;
             Ek = Mk + eph.getE() * Math.sin(Ek);
             dEk = Math.IEEEremainder(Ek - EkOld, 2 * Math.PI);
-            if (Math.abs(dEk) < 1e-12)
+            if (Math.abs(dEk) < 1e-9)
                 break;
         }
 
         // TODO Display/log warning message
-        if (i == maxNumIter)
+        if (i == maxNumIter) {
             System.out.println("Warning: Eccentric anomaly does not converge.");
+            return 0;
+        }
 
         return Ek;
 

@@ -295,6 +295,7 @@ public class RecordActivity extends AppCompatActivity {
                     }
                 });
 
+
                 //计算卫星位置/平差计算
                 sumConstellation.calculateSatPosition(mGNSSEphemericsNtrip,pose);
 
@@ -313,8 +314,10 @@ public class RecordActivity extends AppCompatActivity {
                     }
 
                     //这里也是避免计算得到的接收机位置出现错误
-                    if(p!=null) pose=p;
+                   // if(p!=null) pose=p;
                 }
+
+
 
 
             }
@@ -428,7 +431,7 @@ public class RecordActivity extends AppCompatActivity {
                     Log.d(TAG, "未获得定位结果");
                 }
                 //接收机位置是否初始化
-                poseinitialized=true;
+                //poseinitialized=true;
             }
 
             //获取接收机的位置
@@ -629,32 +632,36 @@ public class RecordActivity extends AppCompatActivity {
 
                         startRecordRinex();
 
-                        if(sharedPreferences.getInt(Constants.KEY_NAV, Constants.DEF_RINEX_NAV)==Constants.Nav_Yes)
-                        {
-                            startRecordRinexNav();
-                        }
+
                         if(sharedPreferences_spp.getInt(Constants.KEY_SPP_FILE,Constants.SPP_FILE)==Constants.SPP_FILE_YES)
                         {
                             startRecordSPPResult();
+
+                            //从SPP  setting界面获取信息
+
+                            String host=sharedPreferences_spp.getString(Constants.KEY_NTRIP_HOST,Constants.DEF_NTRIP_HOST);
+
+                            int port=Integer.parseInt(sharedPreferences_spp .getString(Constants.KEY_NTRIP_PORT,Constants.DEF_NTRIP_PORT));
+
+                            String username=sharedPreferences_spp.getString(Constants.KEY_NTRIP_USERNAME,Constants.DEF_NTRIP_USERNAME);
+
+                            String password=sharedPreferences_spp.getString(Constants.KEY_NTRIP_PASSWORD,Constants.DEF_NTRIP_PASSWARD);
+
+                            //ntrip连接
+                            mGNSSEphemericsNtrip=new GNSSEphemericsNtrip(new RTCM3Client(host,port,"RTCM3EPH01", username,password, RTCMListener));
+                            new Thread(mGNSSEphemericsNtrip,"GNSS").start();
                         }
 
                         isRecord = true;
 
+                        if(sharedPreferences.getInt(Constants.KEY_NAV, Constants.DEF_RINEX_NAV)==Constants.Nav_Yes)
+                        {
+                            startRecordRinexNav();
 
 
-                        //从SPP  setting界面获取信息
+                        }
 
-                        String host=sharedPreferences_spp.getString(Constants.KEY_NTRIP_HOST,Constants.DEF_NTRIP_HOST);
 
-                        int port=Integer.parseInt(sharedPreferences_spp .getString(Constants.KEY_NTRIP_PORT,Constants.DEF_NTRIP_PORT));
-
-                        String username=sharedPreferences_spp.getString(Constants.KEY_NTRIP_USERNAME,Constants.DEF_NTRIP_USERNAME);
-
-                        String password=sharedPreferences_spp.getString(Constants.KEY_NTRIP_PASSWORD,Constants.DEF_NTRIP_PASSWARD);
-
-                        //ntrip连接
-                        mGNSSEphemericsNtrip=new GNSSEphemericsNtrip(new RTCM3Client(host,port,"RTCM3EPH01", username,password, RTCMListener));
-                        new Thread(mGNSSEphemericsNtrip,"GNSS").start();
 
 
                         //Log.d("click-start", "GPS"+sharedPreferences.getInt(Constants.KEY_GPS_SYSTEM,Constants.DEF_GPS_SYSTEM)+"GAL"+sharedPreferences.getInt(Constants.KEY_GAL_SYSTEM ,Constants.DEF_GAL_SYSTEM));
@@ -664,10 +671,11 @@ public class RecordActivity extends AppCompatActivity {
 
                     } else {
                         stopRecordRinex();
-                        //停止ntrip连接
-                        mGNSSEphemericsNtrip.stopNtrip();
+
                         if(sharedPreferences.getInt(Constants.KEY_NAV, Constants.DEF_RINEX_NAV)==Constants.Nav_Yes)
                         {
+                            //停止ntrip连接
+                            mGNSSEphemericsNtrip.stopNtrip();
                             stopRecordRinexNav();
                         }
                         if(sharedPreferences_spp.getInt(Constants.KEY_SPP_FILE,Constants.SPP_FILE)==Constants.SPP_FILE_YES)
